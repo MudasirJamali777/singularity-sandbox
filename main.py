@@ -1,24 +1,35 @@
 import pygame
-import numpy as np
+
+from sandbox.config import (
+    BACKGROUND_COLOR,
+    FPS,
+    WINDOW_HEIGHT,
+    WINDOW_TITLE,
+    WINDOW_WIDTH,
+)
 
 
-pygame.init()
+def main() -> None:
+    """Boot Pygame, open the window, and run the main loop."""
+    pygame.init()
 
-screen = pygame.display.set_mode((1280, 720))
-pygame.display.set_caption("Singularity Sandbox")
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+    pygame.display.set_caption(WINDOW_TITLE)
+    clock = pygame.time.Clock()
 
-print("Pygame:", pygame.version.ver)
-print("NumPy:", np.__version__)
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
 
-running = True
+        screen.fill(BACKGROUND_COLOR)
+        pygame.display.flip()
 
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+        clock.tick(FPS)
 
-    screen.fill((8, 10, 18))
+    pygame.quit()
 
-    pygame.display.flip()
 
-pygame.quit()
+if __name__ == "__main__":
+    main()
