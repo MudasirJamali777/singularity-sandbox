@@ -30,6 +30,9 @@ def main() -> None:
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 # Left click drops a permanent particle at the cursor.
                 particles.spawn(*event.pos)
+            elif event.type == pygame.MOUSEMOTION and event.buttons[0]:
+                # Left button held while moving: paint a particle here too.
+                particles.spawn(*event.pos)
 
         screen.fill(BACKGROUND_COLOR)
         renderer.draw_particles(screen, particles)
