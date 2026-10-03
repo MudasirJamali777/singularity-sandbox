@@ -1,4 +1,8 @@
-"""Central configuration constants for Singularity Sandbox."""
+"""Central configuration constants for Singularity Sandbox.
+
+Every tunable value lives here so behaviour can be changed in one place
+instead of being scattered through the code as literals.
+"""
 
 # ---------------------------------------------------------------------------
 # Window
@@ -17,4 +21,10 @@ FPS = 60
 # Colors (R, G, B)
 # ---------------------------------------------------------------------------
 BACKGROUND_COLOR = (8, 10, 18)
+PARTICLE_COLOR = (120, 220, 255)
+
+# ---------------------------------------------------------------------------
+# Particles
+# ---------------------------------------------------------------------------
+PARTICLE_RADIUS = 3
 MAX_PARTICLES = 10_000
