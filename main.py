@@ -8,6 +8,7 @@ from sandbox.config import (
     WINDOW_WIDTH,
 )
 from sandbox.particles import ParticleSystem
+from sandbox.physics import PhysicsSystem
 from sandbox.renderer import Renderer
 
 
@@ -21,6 +22,7 @@ def main() -> None:
 
     particles = ParticleSystem()
     renderer = Renderer()
+    physics = PhysicsSystem()
 
     running = True
     while running:
@@ -34,11 +36,14 @@ def main() -> None:
                 # Left button held while moving: paint a particle here too.
                 particles.spawn(*event.pos)
 
+        # tick() returns the milliseconds elapsed since the previous frame,
+        # so physics advances by real time rather than by the FPS target.
+        dt = clock.tick(FPS) / 1000.0
+        physics.step(particles, dt)
+
         screen.fill(BACKGROUND_COLOR)
         renderer.draw_particles(screen, particles)
         pygame.display.flip()
-
-        clock.tick(FPS)
 
     pygame.quit()
 
