@@ -28,3 +28,10 @@ PARTICLE_COLOR = (120, 220, 255)
 # ---------------------------------------------------------------------------
 MAX_PARTICLES = 10_000
 PARTICLE_RADIUS = 3
+
+# ---------------------------------------------------------------------------
+# Physics
+# ---------------------------------------------------------------------------
+# Pixels per second squared. Pygame's Y axis points down, so a positive
+# value pulls particles toward the bottom of the window.
+GRAVITY = 1000.0
