@@ -1,9 +1,4 @@
-"""Rendering for Singularity Sandbox.
-
-The renderer is a strict consumer of particle data. Given a Pygame surface
-and a ParticleSystem it draws the active particles and nothing else: it
-never spawns, removes, or otherwise modifies particles.
-"""
+"""Jo bana hai, usay dikhana. Sirf padhna - chhedna nahi."""
 
 from __future__ import annotations
 
@@ -14,11 +9,11 @@ from sandbox.particles import ParticleSystem
 
 
 class Renderer:
-    """Draws simulation state onto a Pygame surface.
+    """Particles ko surface par utaarna.
 
     Attributes:
-        radius: Circle radius in pixels used for every particle.
-        color: RGB tuple used to fill each particle circle.
+        radius: circle ki tajzi (radius), pixels mein.
+        color: particle ka rang, (R, G, B).
     """
 
     def __init__(
@@ -34,21 +29,20 @@ class Renderer:
         surface: pygame.Surface,
         particles: ParticleSystem,
     ) -> None:
-        """Draw every active particle as a small filled circle.
+        """Har zinda particle = chhota bhara circle.
 
-        Only the active slice of the position buffer is visited, so the
-        unused preallocated slots cost nothing at draw time. The surface is
-        drawn on top of: fill it with the background colour first.
+        Sirf active slice par nazar. Drawing surface ke upar hoti hai,
+        isliye pehle background se fill karna zaroori hai.
 
         Args:
-            surface: Target Pygame surface, typically the display screen.
-            particles: The system to read positions from. Read only.
+            surface: jis par banayein, aam taur par screen.
+            particles: sirf padha jaayega.
         """
-        # Bind locals so the hot loop avoids attribute lookups per particle.
+        # Loop mein attribute dhoondhna mehnga - pehle pakad lo.
         draw_circle = pygame.draw.circle
         radius = self.radius
         color = self.color
 
         for x, y in particles.active_positions:
-            # Pygame's draw calls want integer screen coordinates.
+            # Pygame ko poore number chahiye, decimal nahi.
             draw_circle(surface, color, (int(x), int(y)), radius)

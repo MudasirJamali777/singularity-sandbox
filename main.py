@@ -1,3 +1,4 @@
+"""Singularity Sandbox - chhoti shuruaat."""
 import pygame
 
 from sandbox.config import (
@@ -13,13 +14,14 @@ from sandbox.renderer import Renderer
 
 
 def main() -> None:
-    """Boot Pygame, open the window, and run the main loop."""
+    """Pygame jagaao, khirki kholo, loop chalao."""
     pygame.init()
 
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption(WINDOW_TITLE)
     clock = pygame.time.Clock()
 
+    # Teen saathi - yaadein, roshni, kheench.
     particles = ParticleSystem()
     renderer = Renderer()
     physics = PhysicsSystem()
@@ -30,17 +32,17 @@ def main() -> None:
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                # Left click drops a permanent particle at the cursor.
+                # Click = nayi yaad.
                 particles.spawn(*event.pos)
             elif event.type == pygame.MOUSEMOTION and event.buttons[0]:
-                # Left button held while moving: paint a particle here too.
+                # Drag = yaadon ki lakeer.
                 particles.spawn(*event.pos)
 
-        # tick() returns the milliseconds elapsed since the previous frame,
-        # so physics advances by real time rather than by the FPS target.
+        # tick() ka waqt sacch hai - FPS ka number nahi.
         dt = clock.tick(FPS) / 1000.0
         physics.step(particles, dt)
 
+        # Pehle saaf, phir dikhao, phir parda.
         screen.fill(BACKGROUND_COLOR)
         renderer.draw_particles(screen, particles)
         pygame.display.flip()

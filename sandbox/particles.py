@@ -1,12 +1,7 @@
-"""Particle storage for Singularity Sandbox.
+"""Sirf yaadein rakhna - Pygame nahi, gravity nahi, velocity nahi.
 
-This module is pure data: it knows nothing about Pygame, gravity, velocity,
-or rendering. Its only job is to hold particle positions in preallocated
-NumPy arrays so later systems can operate on them in bulk.
-
-Two arrays are kept per particle: the current position and the position it
-held on the previous physics step. Their difference implies velocity, which
-is what Verlet integration needs.
+Do float32 arrays: ``positions`` (ab ka pata) aur ``previous_positions``
+(pichhla lamha). Dono ka farq hi raftaar hai.
 """
 
 from __future__ import annotations
@@ -18,22 +13,15 @@ from sandbox.config import MAX_PARTICLES
 
 
 class ParticleSystem:
-    """Fixed-capacity storage for particle positions.
+    """Fixed jagah, badalti yaadein.
 
-    Positions live in two preallocated ``(capacity, 2)`` float32 arrays.
-    Only the first ``count`` rows of each are meaningful; the remaining rows
-    are unused slots that are simply waiting to be filled.
-
-    The pair of arrays is what makes Verlet integration possible later:
-    ``positions - previous_positions`` is the implied per-step displacement,
-    so no velocity array ever has to be stored.
+    Sirf pehli ``count`` rows zinda hain; baaki khali khanay.
 
     Attributes:
-        capacity: Maximum number of particles the system can hold.
-        count: Number of particles currently active.
-        positions: Full ``(capacity, 2)`` array of current positions.
-        previous_positions: Full ``(capacity, 2)`` array of the positions
-            held on the previous physics step.
+        capacity: kul kitni jagah.
+        count: abhi kitne zinda.
+        positions: poora ``(capacity, 2)``, ab ke pata ke saath.
+        previous_positions: poora ``(capacity, 2)``, pichhle lamhe ke saath.
     """
 
     def __init__(self, capacity: int = MAX_PARTICLES) -> None:
@@ -42,7 +30,7 @@ class ParticleSystem:
 
         self.capacity = int(capacity)
         self.count = 0
-        # Both allocated once, up front. Never resized.
+        # Dono arrays yahin bane - ab na bade, na badle.
         self.positions: NDArray[np.float32] = np.zeros(
             (self.capacity, 2), dtype=np.float32
         )
@@ -51,43 +39,35 @@ class ParticleSystem:
         )
 
     # ------------------------------------------------------------------
-    # State
+    # Haal
     # ------------------------------------------------------------------
     @property
     def is_full(self) -> bool:
-        """True when no unused slots remain."""
+        """Khali jagah bachi hai ya nahi."""
         return self.count >= self.capacity
 
     @property
     def active_positions(self) -> NDArray[np.float32]:
-        """A view of just the live rows, shaped ``(count, 2)``.
+        """Zinda particles ke ab ke pate, shape ``(count, 2)``.
 
-        This is a slice, not a copy, so bulk NumPy work on it is cheap and
-        any in-place writes flow back into the underlying array. Note that
-        a view taken now does not grow when more particles are spawned.
+        View hai, copy nahi - isliye bulk kaam sasta. Abhi liya view aage
+        spawn honay par khud nahi barhta.
         """
         return self.positions[: self.count]
 
     @property
     def active_previous_positions(self) -> NDArray[np.float32]:
-        """A view of just the live rows of the previous-position array.
-
-        Mirrors :attr:`active_positions` so physics can read or write both
-        halves of the Verlet pair without knowing about ``count``.
-        """
+        """Wahi baat, pichhle lamhe ki - shape ``(count, 2)``."""
         return self.previous_positions[: self.count]
 
     # ------------------------------------------------------------------
-    # Mutation
+    # Badlaav
     # ------------------------------------------------------------------
     def spawn(self, x: float, y: float) -> bool:
-        """Place a particle at ``(x, y)`` in the next unused slot.
+        """``(x, y)`` par nayi yaad.
 
-        Both the current and previous position are set to ``(x, y)``, which
-        means the new particle starts with zero implied velocity.
-
-        Does nothing and returns ``False`` if the system is already at
-        capacity, so callers never have to guard against an overflow.
+        Ab aur pichhla lamha dono wahi - yani raftaar zero. Jagah na ho to
+        kuch nahi hota aur ``False`` laut aata hai.
         """
         if self.count >= self.capacity:
             return False
@@ -100,15 +80,11 @@ class ParticleSystem:
         return True
 
     def clear(self) -> None:
-        """Deactivate every particle without touching either allocation.
-
-        Only the count is reset; the stale coordinates left in the arrays
-        are unreachable and get overwritten as new particles are spawned.
-        """
+        """Sab bhool jao - sirf count zero, arrays waise hi."""
         self.count = 0
 
     # ------------------------------------------------------------------
-    # Dunder helpers
+    # Chhote helpers
     # ------------------------------------------------------------------
     def __len__(self) -> int:
         return self.count

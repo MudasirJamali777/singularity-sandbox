@@ -1,15 +1,9 @@
-"""Verlet integration for Singularity Sandbox.
-
-Each step advances every active particle with the velocity-free Verlet form:
+"""Verlet - raftaar store kiye baghair.
 
     next = current + (current - previous) + acceleration * dt**2
 
-The difference between the two position buffers *is* the implied motion, so
-no velocity array is ever stored. Gravity is a constant acceleration on the
-Y axis; Pygame's Y axis points down, so a positive value makes particles
-fall toward the bottom of the window.
-
-Nothing else is modelled yet: no floor, no damping, no boundaries.
+Farq hi chalna hai. Gravity sirf y par; Pygame mein y neeche jaata hai.
+Abhi na farsh hai, na bounce.
 """
 
 from __future__ import annotations
@@ -22,41 +16,35 @@ from sandbox.particles import ParticleSystem
 
 
 class PhysicsSystem:
-    """Advances particle positions one timestep at a time.
+    """Ek chhoti dhadkan - sab ko aage badha dena.
 
     Attributes:
-        gravity: Downward acceleration in pixels per second squared.
+        gravity: neeche ki kheench, pixels per second squared.
     """
 
     def __init__(self, gravity: float = GRAVITY) -> None:
         self.gravity = float(gravity)
-        # Constant acceleration vector: none on X, gravity on Y.
+        # Sirf y ki taraf kheench.
         self._acceleration: NDArray[np.float32] = np.array(
             (0.0, self.gravity), dtype=np.float32
         )
-        # Scratch space for the displacement term, allocated on first use so
-        # a steady-state step never allocates (or reallocates) anything.
+        # Scratch: ek baar bane, phir usi mein likhe.
         self._displacement: NDArray[np.float32] | None = None
 
     # ------------------------------------------------------------------
     # Simulation
     # ------------------------------------------------------------------
     def step(self, particles: ParticleSystem, dt: float) -> None:
-        """Advance every active particle of ``particles`` by ``dt`` seconds.
+        """Har zinda particle ko ``dt`` second aage badhao.
 
-        The ordering below is the whole point of this method. The two
-        active views are windows directly into the storage buffers, so:
+        Tarteeb hi asal baat hai - dono views seedha storage mein jhankti hain:
 
-        1. The implied displacement (current - previous) is materialised
-           into scratch space *first*, while both buffers still hold last
-           step's numbers.
-        2. Only then is the current position copied into the history buffer.
-           Doing this earlier would erase the very difference the next step
-           needs, and the particles would silently lose all momentum.
-        3. Finally the current positions are moved in place, which also
-           leaves the history buffer untouched from here on.
+        1. Pehle farq (current - previous) scratch mein.
+        2. Phir current ko history mein likho. Yeh pehle kiya to wahi farq
+           mit jaata - aur raftaar chupchaap kho jaati.
+        3. Aakhir mein current aage badhao.
 
-        Inactive slots beyond ``count`` are never touched.
+        ``count`` se aage wale khane kabhi chhue nahi jaate.
         """
         count = particles.count
         if count == 0:
@@ -68,21 +56,20 @@ class PhysicsSystem:
         displacement = self._displacement_scratch(particles.capacity)[:count]
         np.subtract(current, previous, out=displacement)
 
-        # History: where every particle was before this step.
+        # History: qadam se pehle kahan tha.
         np.copyto(previous, current)
 
         current += displacement
         current += self._acceleration * (dt * dt)
 
     # ------------------------------------------------------------------
-    # Internals
+    # Andar
     # ------------------------------------------------------------------
     def _displacement_scratch(self, capacity: int) -> NDArray[np.float32]:
-        """Return a float32 buffer of at least ``capacity`` rows.
+        """``capacity`` rows ka float32 buffer.
 
-        Sized by capacity rather than by the live count: painting spawns
-        particles one at a time, and resizing per spawn would allocate on
-        almost every frame.
+        Jagah capacity se li jaati hai, count se nahi - warna painting
+        har frame resize karti.
         """
         scratch = self._displacement
         if scratch is None or scratch.shape[0] < capacity:
