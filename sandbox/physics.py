@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
-from sandbox.config import GRAVITY, PARTICLE_RADIUS, WINDOW_HEIGHT
+from sandbox.config import BOUNCE, GRAVITY, PARTICLE_RADIUS, WINDOW_HEIGHT
 from sandbox.particles import ParticleSystem
 
 
@@ -21,16 +21,19 @@ class PhysicsSystem:
     Attributes:
         gravity: neeche ki kheench, pixels per second squared.
         floor: sabse neeche wala y, jahan particle ka markaz rukta hai.
+        bounce: farsh se kitni raftaar wapas, 0.0 se 1.0 tak.
     """
 
     def __init__(
         self,
         gravity: float = GRAVITY,
         floor: float = WINDOW_HEIGHT - PARTICLE_RADIUS,
+        bounce: float = BOUNCE,
     ) -> None:
         self.gravity = float(gravity)
         # Radius jitna upar - warna aadha particle screen se bahar jhaankega.
         self.floor = float(floor)
+        self.bounce = float(bounce)
         # Sirf y ki taraf kheench.
         self._acceleration: NDArray[np.float32] = np.array(
             (0.0, self.gravity), dtype=np.float32
@@ -79,20 +82,35 @@ class PhysicsSystem:
         current: NDArray[np.float32],
         previous: NDArray[np.float32],
     ) -> None:
-        """Farsh se neeche wale sab ko farsh par rok do.
+        """Farsh se takraane wale sab ko chhota sa uchhaal do.
 
-        Sirf ``current`` dabana kaafi nahi. Verlet mein raftaar
-        ``current - previous`` hai, isliye ``previous`` bhi farsh par laana
-        padta hai - warna farq ulta reh jaata aur particle farsh se takra
-        kar wapas uchhal padta. Dono barabar = y ki raftaar zero.
+        Verlet mein raftaar ``current - previous`` hai - isliye bounce sirf
+        ``previous`` badal kar banaya jaata hai.
 
-        Mask mein sirf wahi particles aate hain jo farsh se neeche hain,
-        isliye hawa mein udte hue bilkul na chhue jaate hain.
+        Iss qadam ka displacement ``m = current - previous`` hai (Pygame
+        mein +y neeche, to neeche aate waqt m > 0). Agla qadam
+        ``floor - previous`` chalega, aur woh ulte rukh mein ``-BOUNCE * m``
+        hona chahiye:
+
+            previous = floor + BOUNCE * m
+
+        m = 0 (chhoo kar ruk gaya) par previous = floor - yani BOUNCE = 0
+        bilkul purane behaviour par laut jata hai. BOUNCE = 1 par poori
+        raftaar wapas - perfect elastic.
+
+        Mask mein sirf neeche wale particles aate hain, isliye hawa mein
+        udte hue bilkul na chhue jaate hain.
         """
         below = current[:, 1] > self.floor
-        if below.any():
-            current[below, 1] = self.floor
-            previous[below, 1] = self.floor
+        if not below.any():
+            return
+
+        # Iss qadam ka displacement (+y = neeche, to girte waqt positive).
+        step_dy = current[below, 1] - previous[below, 1]
+
+        current[below, 1] = self.floor
+        # `floor - previous` == -BOUNCE * step_dy, yani agla qadam upar.
+        previous[below, 1] = self.floor + self.bounce * step_dy
 
     # ------------------------------------------------------------------
     # Andar
@@ -110,4 +128,7 @@ class PhysicsSystem:
         return scratch
 
     def __repr__(self) -> str:
-        return f"PhysicsSystem(gravity={self.gravity}, floor={self.floor})"
+        return (
+            f"PhysicsSystem(gravity={self.gravity}, floor={self.floor}, "
+            f"bounce={self.bounce})"
+        )
