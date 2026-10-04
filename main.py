@@ -1,9 +1,11 @@
 """Singularity Sandbox - chhoti shuruaat."""
+
 import pygame
 
 from sandbox.config import (
     BACKGROUND_COLOR,
     FPS,
+    PHYSICS_DT,
     WINDOW_HEIGHT,
     WINDOW_TITLE,
     WINDOW_WIDTH,
@@ -26,8 +28,14 @@ def main() -> None:
     renderer = Renderer()
     physics = PhysicsSystem()
 
+    # Bacha hua waqt - jab tak ek qadam ka na ho jaye.
+    accumulator = 0.0
+
     running = True
     while running:
+        # Pehle waqt naapo: tick() frame ko seemit karta hai.
+        dt = clock.tick(FPS) / 1000.0
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -38,9 +46,11 @@ def main() -> None:
                 # Drag = yaadon ki lakeer.
                 particles.spawn(*event.pos)
 
-        # tick() ka waqt sacch hai - FPS ka number nahi.
-        dt = clock.tick(FPS) / 1000.0
-        physics.step(particles, dt)
+        # Jo waqt aaya, jama karo - phir barabar hisson mein kharch.
+        accumulator += dt
+        while accumulator >= PHYSICS_DT:
+            physics.step(particles, PHYSICS_DT)
+            accumulator -= PHYSICS_DT
 
         # Pehle saaf, phir dikhao, phir parda.
         screen.fill(BACKGROUND_COLOR)
