@@ -63,3 +63,35 @@ BRUSH_SPACING = 0.5
 # Ek event par centers ki hadd - tez jhatke par particle ki barish na ho.
 BRUSH_MAX_SAMPLES = 64
 BRUSH_PREVIEW_COLOR = (90, 135, 180)    # halka neela outline
+
+# ---------------------------------------------------------------------------
+# Tools - haath mein kya hai
+# ---------------------------------------------------------------------------
+# Brush se banate hain, attractor se kheenchte hain, explosion se udaate hain.
+
+# ---------------------------------------------------------------------------
+# Attractor - jo paas bulaata hai
+# ---------------------------------------------------------------------------
+# Kitni door tak haath pahunchta hai.
+ATTRACTOR_RADIUS = 240.0
+# Kheench (pixels per second squared): markaz par sabse tez, kinare par zero.
+ATTRACTOR_STRENGTH = 2600.0
+ATTRACTOR_PREVIEW_COLOR = (150, 120, 230)   # halka banafshi
+
+# ---------------------------------------------------------------------------
+# Explosion - ek dhamaka, ek hi baar
+# ---------------------------------------------------------------------------
+EXPLOSION_RADIUS = 280.0
+# Dhakke ki raftaar (pixels per second): markaz par sabse tez, kinare par zero.
+# Yeh taqat nahi, raftaar hai - chhota sa jhatka, isliye waqt se nahi badalta.
+EXPLOSION_STRENGTH = 3200.0
+EXPLOSION_PREVIEW_COLOR = (235, 140, 90)    # halka naarangi
+# Flash kitni der zinda rahe - ek jhapki, bas.
+EXPLOSION_FLASH_SECONDS = 0.22
+EXPLOSION_FLASH_COLOR = (255, 225, 185)     # pal bhar ka ujala
+
+# ---------------------------------------------------------------------------
+# HUD ke aakhri do rang - tool ke naam ke liye
+# ---------------------------------------------------------------------------
+HUD_TOOL_COLOR = (215, 205, 245)          # halka neela-banafshi
+HUD_HELP_COLOR = (95, 115, 140)           # dheema, bas ishara
