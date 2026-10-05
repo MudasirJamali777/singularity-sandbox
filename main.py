@@ -16,7 +16,6 @@ from sandbox.particles import ParticleSystem
 from sandbox.physics import PhysicsSystem
 from sandbox.renderer import Renderer
 
-
 def main() -> None:
     """Pygame jagaao, khirki kholo, loop chalao."""
     pygame.init()
@@ -66,13 +65,12 @@ def main() -> None:
                 # Nayi lakeer - purane nishaan se rishta nahi.
                 brush.lift()
                 paint(brush.centers_to(event.pos))
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (4, 5):
-                # Purane Pygame ka wheel - naye events ke saath bhi chalta hai.
-                brush.resize(1 if event.button == 4 else -1)
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                # Haath chhod diya - lakeer yahin tamam.
+                brush.lift()
             elif event.type == pygame.MOUSEMOTION and event.buttons[0]:
                 # Drag = yaadon ki lakeer (beech ke nishaan bhi).
                 paint(brush.centers_to(event.pos))
-
 
         # Jo waqt aaya, jama karo - phir barabar hisson mein kharch.
         # Ruke hue waqt mein kuch jama nahi hota, warna chhutte par toofan aata.
@@ -90,10 +88,10 @@ def main() -> None:
         if pygame.mouse.get_focused() and 0 <= mouse[0] < WINDOW_WIDTH and 0 <= mouse[1] < WINDOW_HEIGHT:
             renderer.draw_brush_preview(screen, brush.radius, mouse)
 
-
         renderer.draw_hud(screen, clock.get_fps(), particles.count, particles.capacity, paused)
         pygame.display.flip()
 
     pygame.quit()
+
 if __name__ == "__main__":
     main()
