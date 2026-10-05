@@ -5,8 +5,11 @@ from __future__ import annotations
 import pygame
 
 from sandbox.config import (
+    BRUSH_PREVIEW_COLOR,
+    HUD_ACTIVE_COLOR,
     HUD_COLOR,
     HUD_FONT_SIZE,
+    HUD_LINE_GAP,
     HUD_MARGIN,
     HUD_PAUSED_COLOR,
     PARTICLE_COLOR,
@@ -16,13 +19,12 @@ from sandbox.particles import ParticleSystem
 
 
 class Renderer:
-    """Particles aur HUD ko surface par utaarna.
+    """Particles, brush ka nishaan, aur HUD - sab surface par.
 
     Attributes:
-        radius: circle ki tajzi (radius), pixels mein.
+        radius: particle circle ki tajzi (radius), pixels mein.
         color: particle ka rang, (R, G, B).
         font_size: HUD ke text ka size.
-        hud_color, paused_color: HUD ke rang.
     """
 
     def __init__(
@@ -32,14 +34,22 @@ class Renderer:
         font_size: int = HUD_FONT_SIZE,
         hud_color: tuple[int, int, int] = HUD_COLOR,
         paused_color: tuple[int, int, int] = HUD_PAUSED_COLOR,
+        active_color: tuple[int, int, int] = HUD_ACTIVE_COLOR,
+        preview_color: tuple[int, int, int] = BRUSH_PREVIEW_COLOR,
     ) -> None:
         self.radius = radius
         self.color = color
         self.font_size = font_size
         self.hud_color = hud_color
         self.paused_color = paused_color
-        # Font lazily banta hai - pygame.init() se pehle banaya to error.
-        self._font: pygame.font.Font | None = None
+        self.active_color = active_color
+        self.preview_color = preview_color
+        # Font ek hi baar - har frame naya banane ka koi faida nahi.
+        # pygame.font khud sambhal leta hai agar abhi init na hua ho.
+        if not pygame.font.get_init():
+            pygame.font.init()
+        self._font: pygame.font.Font = pygame.font.Font(None, self.font_size)
+        self._line_height = self._font.get_height() + HUD_LINE_GAP
 
     # ------------------------------------------------------------------
     # Particles
@@ -53,10 +63,6 @@ class Renderer:
 
         Sirf active slice par nazar. Drawing surface ke upar hoti hai,
         isliye pehle background se fill karna zaroori hai.
-
-        Args:
-            surface: jis par banayein, aam taur par screen.
-            particles: sirf padha jaayega.
         """
         # Loop mein attribute dhoondhna mehnga - pehle pakad lo.
         draw_circle = pygame.draw.circle
@@ -68,6 +74,21 @@ class Renderer:
             draw_circle(surface, color, (int(x), int(y)), radius)
 
     # ------------------------------------------------------------------
+    # Brush ka nishaan
+    # ------------------------------------------------------------------
+    def draw_brush_preview(
+        self,
+        surface: pygame.Surface,
+        radius: float,
+        center: tuple[int, int],
+    ) -> None:
+        """Cursor ke gird patla sa circle - sirf nazar ke liye.
+
+        Yahan kuch banta nahi, kuch badalta nahi - bas dikhaya jata hai.
+        """
+        pygame.draw.circle(surface, self.preview_color, center, int(radius), 1)
+
+    # ------------------------------------------------------------------
     # HUD
     # ------------------------------------------------------------------
     def draw_hud(
@@ -75,29 +96,27 @@ class Renderer:
         surface: pygame.Surface,
         fps: float,
         particle_count: int,
+        capacity: int,
         paused: bool = False,
     ) -> None:
-        """FPS, particle count - aur agar ruka hua hai to ``PAUSED``.
+        """FPS, particle ka hisaab, aur physics ka haal.
 
         Sirf padhta hai: apni marzi se kuch nahi banata, na hisaab badalta.
+
+            FPS: 60
+            Particles: 1,247 / 10,000
+            Physics: RUNNING
         """
-        font = self._hud_font()
-        text = f"FPS {fps:4.0f}   Particles {particle_count}"
-        label = font.render(text, True, self.hud_color)
-        surface.blit(label, (HUD_MARGIN, HUD_MARGIN))
+        font = self._font
+        y = HUD_MARGIN
 
-        if paused:
-            note = font.render("PAUSED", True, self.paused_color)
-            surface.blit(note, (HUD_MARGIN, HUD_MARGIN + label.get_height() + 4))
-
-    def _hud_font(self) -> pygame.font.Font:
-        """Font ek baar banao, phir wahi use karo.
-
-        ``pygame.font`` khud check karke init karte hain, taake HUD kisi bhi
-        order mein bulane par chale.
-        """
-        if not pygame.font.get_init():
-            pygame.font.init()
-        if self._font is None:
-            self._font = pygame.font.Font(None, self.font_size)
-        return self._font
+        for text, color in (
+            (f"FPS: {fps:.0f}", self.hud_color),
+            (f"Particles: {particle_count:,} / {capacity:,}", self.hud_color),
+            (
+                "Physics: PAUSED" if paused else "Physics: RUNNING",
+                self.paused_color if paused else self.active_color,
+            ),
+        ):
+            surface.blit(font.render(text, True, color), (HUD_MARGIN, y))
+            y += self._line_height
