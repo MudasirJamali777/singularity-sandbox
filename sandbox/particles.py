@@ -24,12 +24,14 @@ class ParticleSystem:
         previous_positions: poora ``(capacity, 2)``, pichhle lamhe ke saath.
     """
 
-    def __init__(self, capacity: int = MAX_PARTICLES) -> None:
+    def __init__(self, capacity: int = MAX_PARTICLES, seed: int | None = None) -> None:
         if capacity <= 0:
             raise ValueError(f"capacity must be positive, got {capacity}")
 
         self.capacity = int(capacity)
         self.count = 0
+        # Brush ke bikhre hue nishaan yahin se ugte hain.
+        self.rng = np.random.default_rng(seed)
         # Dono arrays yahin bane - ab na bade, na badle.
         self.positions: NDArray[np.float32] = np.zeros(
             (self.capacity, 2), dtype=np.float32
@@ -78,6 +80,39 @@ class ParticleSystem:
         self.previous_positions[self.count, 1] = y
         self.count += 1
         return True
+
+    def spawn_disk(
+        self,
+        x: float,
+        y: float,
+        radius: float,
+        count: int,
+    ) -> int:
+        """``(x, y)`` ke gird disk bhar ke particles - ek hi baar mein.
+
+        Radius ko ``sqrt`` se sample karte hain: seedha random lene par
+        particles markaz par zyada aur kinaron par kam girte hain. Isi liye
+        yeh asli disk banata hai, square nahi.
+
+        Jagah kam pad jaye to jitne aa sakein utne hi. Lautata hai kitne bane.
+        """
+        free = self.capacity - self.count
+        if count <= 0 or free <= 0 or radius <= 0.0:
+            return 0
+
+        n = min(count, free)
+        # Even disk: r = R * sqrt(u), warna markaz bhar jata hai.
+        r = radius * np.sqrt(self.rng.random(n))
+        angle = self.rng.random(n) * (2.0 * np.pi)
+
+        lo = self.count
+        hi = lo + n
+        self.positions[lo:hi, 0] = x + r * np.cos(angle)
+        self.positions[lo:hi, 1] = y + r * np.sin(angle)
+        # Pichhla lamha bhi wahi - naye particles raftaar zero se shuru.
+        self.previous_positions[lo:hi] = self.positions[lo:hi]
+        self.count = hi
+        return n
 
     def clear(self) -> None:
         """Sab bhool jao - sirf count zero, arrays waise hi."""
