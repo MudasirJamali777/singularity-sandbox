@@ -31,8 +31,16 @@ PARTICLE_RADIUS = 3
 # y neeche jaata hai, isliye positive = giri. Sikka bhi girta hai.
 GRAVITY = 1000.0
 
-# Farsh se takra kar kitni raftaar wapas - 0.0 kuch nahi, 1.0 poori.
-BOUNCE = 1.0
+# Farsh se takra kar kitni raftaar wapas - 0.0 kuch nhii, 1.0 poori.
+BOUNCE = 0.7
 
 # Ek second / 120 qadam. Fixed rehta hai, FPS se nahi badalta.
 PHYSICS_DT = 1.0 / 120.0
+
+# ---------------------------------------------------------------------------
+# HUD - chhoti si khabar, screen ke kone mein
+# ---------------------------------------------------------------------------
+HUD_COLOR = (150, 175, 200)         # halka sa neela-grey
+HUD_PAUSED_COLOR = (255, 190, 120)  # thama hua waqt - garam rang
+HUD_FONT_SIZE = 18
+HUD_MARGIN = 10

@@ -3,7 +3,7 @@
     next = current + (current - previous) + acceleration * dt**2
 
 Farq hi chalna hai. Gravity sirf y par; Pygame mein y neeche jaata hai.
-Farsh aa gaya - magar bounce nahi, sirf tham jaana.
+Chaaron kinare aa gaye - har takraav par thoda sa uchhaal (BOUNCE).
 """
 
 from __future__ import annotations
@@ -11,7 +11,13 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
-from sandbox.config import BOUNCE, GRAVITY, PARTICLE_RADIUS, WINDOW_HEIGHT
+from sandbox.config import (
+    BOUNCE,
+    GRAVITY,
+    PARTICLE_RADIUS,
+    WINDOW_HEIGHT,
+    WINDOW_WIDTH,
+)
 from sandbox.particles import ParticleSystem
 
 
@@ -20,20 +26,26 @@ class PhysicsSystem:
 
     Attributes:
         gravity: neeche ki kheench, pixels per second squared.
-        floor: sabse neeche wala y, jahan particle ka markaz rukta hai.
-        bounce: farsh se kitni raftaar wapas, 0.0 se 1.0 tak.
+        bounce: har takraav par kitni raftaar wapas, 0.0 se 1.0 tak.
+        floor, ceiling, left_wall, right_wall: kinare, radius ke hisaab se.
     """
 
     def __init__(
         self,
         gravity: float = GRAVITY,
-        floor: float = WINDOW_HEIGHT - PARTICLE_RADIUS,
         bounce: float = BOUNCE,
+        floor: float = WINDOW_HEIGHT - PARTICLE_RADIUS,
+        ceiling: float = PARTICLE_RADIUS,
+        left_wall: float = PARTICLE_RADIUS,
+        right_wall: float = WINDOW_WIDTH - PARTICLE_RADIUS,
     ) -> None:
         self.gravity = float(gravity)
-        # Radius jitna upar - warna aadha particle screen se bahar jhaankega.
-        self.floor = float(floor)
         self.bounce = float(bounce)
+        # Radius ke hisaab se - warna aadhe particle bahar jhaankte hain.
+        self.floor = float(floor)
+        self.ceiling = float(ceiling)
+        self.left_wall = float(left_wall)
+        self.right_wall = float(right_wall)
         # Sirf y ki taraf kheench.
         self._acceleration: NDArray[np.float32] = np.array(
             (0.0, self.gravity), dtype=np.float32
@@ -45,14 +57,14 @@ class PhysicsSystem:
     # Simulation
     # ------------------------------------------------------------------
     def step(self, particles: ParticleSystem, dt: float) -> None:
-        """Har zinda particle ko ``dt`` second aage badhao, phir farsh sambhalo.
+        """Har zinda particle ko ``dt`` second aage badhao, phir kinare sambhalo.
 
         Tarteeb hi asal baat hai - dono views seedha storage mein jhankti hain:
 
         1. Pehle farq (current - previous) scratch mein.
         2. Phir current ko history mein likho. Yeh pehle kiya to wahi farq
            mit jaata - aur raftaar chupchaap kho jaati.
-        3. Aakhir mein current aage badhao, phir farsh par utaaro.
+        3. Aakhir mein current aage badhao, phir deewaron se takrao.
 
         ``count`` se aage wale khane kabhi chhue nahi jaate.
         """
@@ -72,45 +84,72 @@ class PhysicsSystem:
         current += displacement
         current += self._acceleration * (dt * dt)
 
-        self._apply_floor(current, previous)
+        self._apply_boundaries(current, previous)
 
     # ------------------------------------------------------------------
-    # Farsh
+    # Kinare
     # ------------------------------------------------------------------
-    def _apply_floor(
+    def _apply_boundaries(
         self,
         current: NDArray[np.float32],
         previous: NDArray[np.float32],
     ) -> None:
-        """Farsh se takraane wale sab ko chhota sa uchhaal do.
+        """Chaaron kinare - dono axis, apne apne mask ke saath.
 
-        Verlet mein raftaar ``current - previous`` hai - isliye bounce sirf
-        ``previous`` badal kar banaya jaata hai.
-
-        Iss qadam ka displacement ``m = current - previous`` hai (Pygame
-        mein +y neeche, to neeche aate waqt m > 0). Agla qadam
-        ``floor - previous`` chalega, aur woh ulte rukh mein ``-BOUNCE * m``
-        hona chahiye:
-
-            previous = floor + BOUNCE * m
-
-        m = 0 (chhoo kar ruk gaya) par previous = floor - yani BOUNCE = 0
-        bilkul purane behaviour par laut jata hai. BOUNCE = 1 par poori
-        raftaar wapas - perfect elastic.
-
-        Mask mein sirf neeche wale particles aate hain, isliye hawa mein
-        udte hue bilkul na chhue jaate hain.
+        Har kinara alag mask hai (hit_left / hit_right / hit_top /
+        hit_bottom), isliye sirf takraane wale particles chhue jaate hain;
+        hawa mein udte hue bilkul azad rehte hain.
         """
-        below = current[:, 1] > self.floor
-        if not below.any():
-            return
+        # Y: ceiling (chhoti value) aur floor (bari value).
+        self._bounce_axis(current, previous, 1, self.ceiling, self.floor)
+        # X: left wall (chhoti value) aur right wall (bari value).
+        self._bounce_axis(current, previous, 0, self.left_wall, self.right_wall)
 
-        # Iss qadam ka displacement (+y = neeche, to girte waqt positive).
-        step_dy = current[below, 1] - previous[below, 1]
+    def _bounce_axis(
+        self,
+        current: NDArray[np.float32],
+        previous: NDArray[np.float32],
+        axis: int,
+        low: float,
+        high: float,
+    ) -> None:
+        """Ek axis ke dono kinare.
 
-        current[below, 1] = self.floor
-        # `floor - previous` == -BOUNCE * step_dy, yani agla qadam upar.
-        previous[below, 1] = self.floor + self.bounce * step_dy
+        Qaida har kinare par ek hi hai:
+
+            purana displacement : d = current - previous
+            naya  displacement : -BOUNCE * d
+
+        Verlet mein displacement ``current - previous`` chhipa hua hai, isliye
+        naya displacement ``previous`` ke zariye likha jaata hai:
+
+            previous = current - naya_displacement
+
+        ``current`` pehle kinare par clamp ho jata hai, to yeh yun banta hai:
+
+            previous = kinara + BOUNCE * d
+
+        BOUNCE = 0 par ``previous`` kinare par hi ruk jata hai (purana
+        behaviour); BOUNCE = 1 par poori raftaar wapas. Dono current aur
+        previous barabar kar dena ghalat hai - woh particle ko rook deta hai,
+        uchhaal nahi.
+        """
+        positions = current[:, axis]
+        previous_axis = previous[:, axis]
+        # Purana displacement pehle pakdo, warna clamp karne par mit jayega.
+        step_d = positions - previous_axis
+
+        hit_low = positions < low
+        if hit_low.any():
+            positions[hit_low] = low
+            outgoing = -self.bounce * step_d[hit_low]
+            previous_axis[hit_low] = low - outgoing
+
+        hit_high = positions > high
+        if hit_high.any():
+            positions[hit_high] = high
+            outgoing = -self.bounce * step_d[hit_high]
+            previous_axis[hit_high] = high - outgoing
 
     # ------------------------------------------------------------------
     # Andar
@@ -129,6 +168,7 @@ class PhysicsSystem:
 
     def __repr__(self) -> str:
         return (
-            f"PhysicsSystem(gravity={self.gravity}, floor={self.floor}, "
-            f"bounce={self.bounce})"
+            f"PhysicsSystem(gravity={self.gravity}, bounce={self.bounce}, "
+            f"bounds=({self.left_wall}, {self.ceiling}, "
+            f"{self.right_wall}, {self.floor}))"
         )
