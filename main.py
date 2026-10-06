@@ -4,6 +4,7 @@ import pygame
 
 from sandbox.config import (
     BACKGROUND_COLOR,
+    BRUSH_MAX_RADIUS,
     FPS,
     PARTICLES_PER_STROKE,
     PHYSICS_DT,
@@ -33,6 +34,7 @@ def main() -> None:
     # Bacha hua waqt - jab tak ek qadam ka na ho jaye.
     accumulator = 0.0
     paused = False
+    spatial_debug = False
 
     def paint(centers: list[tuple[float, float]]) -> None:
         """Har nishaan par brush bhar do - particles ka kaam ParticleSystem ka."""
@@ -57,8 +59,16 @@ def main() -> None:
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
                 # Sab kuch gayab - aur waqt ka hisaab bhi saaf.
                 particles.clear()
+                physics.reset_collision_stats()
+                physics.spatial_hash.clear()
                 accumulator = 0.0
                 brush.lift()
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_c:
+                physics.toggle_collisions()
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_F1:
+                spatial_debug = not spatial_debug
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_1:
+                brush.radius = BRUSH_MAX_RADIUS
             elif event.type == pygame.MOUSEWHEEL:
                 brush.resize(event.y)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -80,15 +90,32 @@ def main() -> None:
                 physics.step(particles, PHYSICS_DT)
                 accumulator -= PHYSICS_DT
 
-        # Pehle saaf, phir dikhao, phir nishaan, phir khabar, phir parda.
+        # Pehle saaf, phir particles aur optional grid, brush, khabar, parda.
         screen.fill(BACKGROUND_COLOR)
         renderer.draw_particles(screen, particles)
+        if spatial_debug:
+            # The renderer is read-only; refresh here so the overlay remains
+            # current even while physics is paused or collisions are disabled.
+            physics.rebuild_spatial_hash(particles)
+            renderer.draw_spatial_grid(screen, physics.spatial_hash)
 
         mouse = pygame.mouse.get_pos()
         if pygame.mouse.get_focused() and 0 <= mouse[0] < WINDOW_WIDTH and 0 <= mouse[1] < WINDOW_HEIGHT:
             renderer.draw_brush_preview(screen, brush.radius, mouse)
 
-        renderer.draw_hud(screen, clock.get_fps(), particles.count, particles.capacity, paused)
+        renderer.draw_hud(
+            screen,
+            clock.get_fps(),
+            particles.count,
+            particles.capacity,
+            paused,
+            collisions_enabled=physics.collisions_enabled,
+            candidate_pairs=physics.candidate_pairs,
+            overlaps=physics.overlaps,
+            collision_time_ms=physics.collision_time_ms,
+            spatial_debug=spatial_debug,
+            occupied_cells=physics.spatial_hash.occupied_cell_count,
+        )
         pygame.display.flip()
 
     pygame.quit()

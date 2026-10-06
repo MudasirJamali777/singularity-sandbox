@@ -26,6 +26,17 @@ MAX_PARTICLES = 10_000
 PARTICLE_RADIUS = 3
 
 # ---------------------------------------------------------------------------
+# Neighbor search and particle collisions
+# ---------------------------------------------------------------------------
+# A diameter-sized cell means ordinary collisions need only a 3x3 neighborhood.
+CELL_SIZE = PARTICLE_RADIUS * 2
+COLLISION_ITERATIONS = 3
+# Start in ghost mode so the existing experiment remains easy to compare;
+# press C to enable positional particle-particle collisions.
+COLLISIONS_ENABLED = False
+COLLISION_DISTANCE_EPSILON_SQUARED = 1e-12
+
+# ---------------------------------------------------------------------------
 # Physics - jo neeche kheenchta hai
 # ---------------------------------------------------------------------------
 # y neeche jaata hai, isliye positive = giri. Sikka bhi girta hai.

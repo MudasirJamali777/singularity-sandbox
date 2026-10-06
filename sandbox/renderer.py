@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pygame
 
 from sandbox.config import (
@@ -16,6 +18,7 @@ from sandbox.config import (
     PARTICLE_RADIUS,
 )
 from sandbox.particles import ParticleSystem
+from sandbox.spatial import SpatialHash
 
 
 class Renderer:
@@ -74,6 +77,42 @@ class Renderer:
             draw_circle(surface, color, (int(x), int(y)), radius)
 
     # ------------------------------------------------------------------
+    # Spatial-hash debug overlay
+    # ------------------------------------------------------------------
+    def draw_spatial_grid(
+        self,
+        surface: pygame.Surface,
+        spatial_hash: SpatialHash,
+    ) -> None:
+        """Outline occupied cells without changing the spatial hash.
+
+        Cell outlines are blue for sparse cells, yellow for busy cells, and
+        red for especially crowded cells. The overlay is intentionally an
+        observer: the renderer only consumes cell coordinates/populations.
+        """
+        cell_size = spatial_hash.cell_size
+        screen_rect = surface.get_rect()
+
+        for (cell_x, cell_y), population in spatial_hash.iter_occupied_cells():
+            left = math.floor(cell_x * cell_size)
+            top = math.floor(cell_y * cell_size)
+            right = math.ceil((cell_x + 1) * cell_size)
+            bottom = math.ceil((cell_y + 1) * cell_size)
+            rect = pygame.Rect(left, top, max(1, right - left), max(1, bottom - top))
+            if not screen_rect.colliderect(rect):
+                continue
+
+            if population <= 2:
+                color = (55, 115, 185)       # sparse: blue
+            elif population <= 5:
+                color = (70, 195, 205)       # filling: cyan
+            elif population <= 10:
+                color = (245, 195, 65)       # crowded: yellow
+            else:
+                color = (245, 85, 75)        # very crowded: red
+            pygame.draw.rect(surface, color, rect, 1)
+
+    # ------------------------------------------------------------------
     # Brush ka nishaan
     # ------------------------------------------------------------------
     def draw_brush_preview(
@@ -98,25 +137,45 @@ class Renderer:
         particle_count: int,
         capacity: int,
         paused: bool = False,
+        collisions_enabled: bool = False,
+        candidate_pairs: int = 0,
+        overlaps: int = 0,
+        collision_time_ms: float = 0.0,
+        spatial_debug: bool = False,
+        occupied_cells: int = 0,
     ) -> None:
-        """FPS, particle ka hisaab, aur physics ka haal.
+        """Show performance, simulation state, and collision diagnostics.
 
-        Sirf padhta hai: apni marzi se kuch nahi banata, na hisaab badalta.
-
-            FPS: 60
-            Particles: 1,247 / 10,000
-            Physics: RUNNING
+        Collision counts/time are from the most recent fixed physics step;
+        overlap counts are resolution events summed across solver iterations.
         """
         font = self._font
         y = HUD_MARGIN
-
-        for text, color in (
+        collision_color = self.active_color if collisions_enabled else self.hud_color
+        grid_color = self.active_color if spatial_debug else self.hud_color
+        lines = (
             (f"FPS: {fps:.0f}", self.hud_color),
             (f"Particles: {particle_count:,} / {capacity:,}", self.hud_color),
             (
                 "Physics: PAUSED" if paused else "Physics: RUNNING",
                 self.paused_color if paused else self.active_color,
             ),
-        ):
+            (
+                f"Collisions: {'ON' if collisions_enabled else 'OFF'}  (C)",
+                collision_color,
+            ),
+            (
+                f"Spatial grid: {'ON' if spatial_debug else 'OFF'}  (F1)"
+                + (f" - {occupied_cells:,} cells" if spatial_debug else ""),
+                grid_color,
+            ),
+            (
+                f"Collision step: {candidate_pairs:,} candidates | "
+                f"{overlaps:,} overlaps | {collision_time_ms:.2f} ms",
+                self.hud_color,
+            ),
+        )
+
+        for text, color in lines:
             surface.blit(font.render(text, True, color), (HUD_MARGIN, y))
             y += self._line_height
