@@ -18,15 +18,19 @@ from sandbox.config import (
     BRUSH_WHEEL_STEP,
 )
 
+
 class Tool(Enum):
-    """Teen auzaar - banane, kheenchne, aur udaane ke liye."""
+    """Chaar auzaar - banane, kheenchne, udaane, aur kuan gerna."""
 
     BRUSH = "BRUSH"
     ATTRACTOR = "ATTRACTOR"
     EXPLOSION = "EXPLOSION"
+    WELL = "GRAVITY WELL"
 
-# HUD aur keyboard dono isi tarteeb par chalte hain: 1, 2, 3.
-TOOL_ORDER: tuple[Tool, ...] = (Tool.BRUSH, Tool.ATTRACTOR, Tool.EXPLOSION)
+
+# HUD aur keyboard dono isi tarteeb par chalte hain: 1, 2, 3, 4.
+TOOL_ORDER: tuple[Tool, ...] = (Tool.BRUSH, Tool.ATTRACTOR, Tool.EXPLOSION, Tool.WELL)
+
 
 class ToolState:
     """Haath mein kaunsa auzaar hai.
@@ -76,6 +80,7 @@ class ToolState:
 
     def __repr__(self) -> str:
         return f"ToolState(selected={self._tool.value})"
+
 
 class Brush:
     """Brush ka dil - radius, aur pichhli lakeer ka nishaan.
