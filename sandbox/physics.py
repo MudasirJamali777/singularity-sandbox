@@ -15,15 +15,33 @@ from sandbox.config import (
     ATTRACTOR_RADIUS,
     ATTRACTOR_STRENGTH,
     BOUNCE,
+    COLLISION_CONTACT_MARGIN,
+    COLLISION_DEGENERATE_DISTANCE,
+    COLLISION_ITERATIONS,
+    COLLISION_PREVIOUS_SHARE,
+    COLLISION_SLOP,
     EXPLOSION_RADIUS,
     EXPLOSION_STRENGTH,
+    GRAVITATIONAL_CONSTANT,
     GRAVITY,
     PARTICLE_RADIUS,
     PHYSICS_DT,
+    WELL_SOFTENING,
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
 )
+from sandbox.gravity import GravityWells
 from sandbox.particles import ParticleSystem
+from sandbox.spatial import SpatialHash
+
+def _fallback_angle(first: NDArray[np.int64], second: NDArray[np.int64]) -> NDArray[np.float64]:
+    """Ek hi jagah phanse jore ki simt - indices se banti hai.
+
+    Deterministic hai (wahi indices, wahi simt) aur alag alag jore alag
+    taraf khinche jaate hain - warna poora dher ek hi lakeer ban jata.
+    """
+    mixed = first.astype(np.int64) * 2654435761 + second.astype(np.int64) * 40503
+    return (mixed % 6283) * 1e-3
 
 class PhysicsSystem:
     """Ek chhoti dhadkan - sab ko aage badha dena.
@@ -34,10 +52,19 @@ class PhysicsSystem:
         floor, ceiling, left_wall, right_wall: kinare, radius ke hisaab se.
         attractor_radius, attractor_strength: kheench ka daayra aur zor.
         explosion_radius, explosion_strength: dhamake ka daayra aur zor.
+        gravitational_constant, softening: kuon ka zor aur narm markaz.
+        collision_iterations: takraav ke kitne pass har qadam.
+        candidates, overlaps: pichhle qadam ka hisaab - kitne jore mumkin
+            the, aur kitne waqai takraye.
+        world_gravity, boundaries, collisions: teen switch.
+
+    Poore jama ka hisaab ek hi jagah hota hai:
+
+        duniya ki kheench + bahar ki taqatain + kuon ka field
 
     Gravity hamesha rehti hai; bahar ki taqatain har qadam par taza di
-    jaati hain (``attract`` / ``clear_forces``) - isliye poore jama ka hisaab
-    ek hi jagah, ek hi qadam mein hota hai.
+    jaati hain (``attract`` / ``clear_forces``); aur kuan duniya mein tike
+    rehte hain - har qadam apna hissa khud dete hain.
     """
 
     def __init__(
@@ -52,6 +79,11 @@ class PhysicsSystem:
         attractor_strength: float = ATTRACTOR_STRENGTH,
         explosion_radius: float = EXPLOSION_RADIUS,
         explosion_strength: float = EXPLOSION_STRENGTH,
+        gravitational_constant: float = GRAVITATIONAL_CONSTANT,
+        softening: float = WELL_SOFTENING,
+        wells: GravityWells | None = None,
+        spatial: SpatialHash | None = None,
+        collision_iterations: int = COLLISION_ITERATIONS,
     ) -> None:
         self.gravity = float(gravity)
         self.bounce = float(bounce)
@@ -65,6 +97,20 @@ class PhysicsSystem:
         self.attractor_strength = float(attractor_strength)
         self.explosion_radius = float(explosion_radius)
         self.explosion_strength = float(explosion_strength)
+        # Kuon ka field - softening ke saath, warna markaz par qayamat.
+        self.gravitational_constant = float(gravitational_constant)
+        self.softening = float(softening)
+        self._wells = wells
+        # Padosiyon ka naqsha - takraav isi se dhoonde jaate hain.
+        self._spatial = spatial if spatial is not None else SpatialHash()
+        self.collision_iterations = int(collision_iterations)
+        self.previous_share = float(COLLISION_PREVIOUS_SHARE)
+        self.candidates = 0
+        self.overlaps = 0
+        # Teen switch: duniya ki kheench, deewarein, aur takraav.
+        self.world_gravity = True
+        self.boundaries = True
+        self.collisions = True
         # Sirf y ki taraf kheench.
         self._acceleration: NDArray[np.float32] = np.array(
             (0.0, self.gravity), dtype=np.float32
@@ -103,6 +149,41 @@ class PhysicsSystem:
     def clear_forces(self) -> None:
         """Bahar ki taqatain khatam - sirf gravity bachi."""
         self._forces = ()
+
+    def toggle_world_gravity(self) -> bool:
+        """Duniya ki kheench on/off - naya haal lautaata hai.
+
+        Band karne se sirf yeh switch badalta hai; gravity khud jaisi thi
+        waisi hi rehti hai - wapas on karte hi utni hi zor se kheenchti hai.
+        """
+        self.world_gravity = not self.world_gravity
+        return self.world_gravity
+
+    def toggle_boundaries(self) -> bool:
+        """Deewarein on/off - naya haal lautaata hai.
+
+        Band hone par koi takraav nahi - particle khuli fiza mein nikal jata
+        hai. Wapas on karte hi bahar wale bhi seedhe ho jaate hain.
+        """
+        self.boundaries = not self.boundaries
+        return self.boundaries
+
+    def toggle_collisions(self) -> bool:
+        """Takraav on/off - naya haal lautaata hai.
+
+        Band hone par particles bhoot ban jaate hain: ek doosre ke aar paar
+        nikal jaate hain. Kuch tajrube isi liye chhue hue chaahiye hote hain.
+        """
+        self.collisions = not self.collisions
+        return self.collisions
+
+    def bind_wells(self, wells: GravityWells | None) -> None:
+        """Kuan ka state yahan aata hai - hisaab phir bhi physics ka."""
+        self._wells = wells
+
+    def bind_spatial(self, spatial: SpatialHash | None) -> None:
+        """Naqsha yahan aata hai - lekin hisaab phir bhi physics ka."""
+        self._spatial = spatial if spatial is not None else SpatialHash()
 
     def attract(self, particles: ParticleSystem, center: tuple[float, float]) -> None:
         """``center`` ki taraf narm kheench - agle qadam ke liye.
@@ -151,14 +232,20 @@ class PhysicsSystem:
 
         Tarteeb hi asal baat hai - dono views seedha storage mein jhankti hain:
 
-        1. Pehle farq (current - previous) scratch mein.
-        2. Phir current ko history mein likho. Yeh pehle kiya to wahi farq
-           mit jaata - aur raftaar chupchaap kho jaati.
-        3. Aakhir mein current aage badhao, phir deewaron se takrao.
+        1. Pehle farq (current - previous) scratch mein - yani raftaar.
+        2. Phir acceleration purani jagah par naapo. Yeh qadam se pehle
+           zaroori hai: kuan ka field jagah ke saath badalta hai, aur Verlet
+           ko wohi force chahiye jo purani jagah par tha. Baad mein naapa
+           to har orbit dheere dheere apni energy kho deti hai.
+        3. Phir history likho, current ko aage badhao, aur deewaron se takrao.
 
-        Gravity ke upar bahar ki taqatain bhi isi qadam mein jama hoti hain -
-        magar sirf tab, jab koi chal rahi ho. ``count`` se aage wale khane
-        kabhi chhue nahi jaate.
+        Acceleration teen jagah se aati hai, aur teenon ek hi jama mein:
+
+            duniya ki kheench + bahar ki taqatain + kuon ka field
+
+        Duniya ki kheench switch se band ho sakti hai; bahar ki taqatain sirf
+        tab ginti hain jab koi chal rahi ho; aur kuan hamesha. ``count`` se
+        aage wale khane kabhi chhue nahi jaate.
         """
         count = particles.count
         if count == 0:
@@ -170,17 +257,141 @@ class PhysicsSystem:
         displacement = self._displacement_scratch(particles.capacity)[:count]
         np.subtract(current, previous, out=displacement)
 
+        wells = self._wells
+        has_wells = wells is not None and wells.count > 0
+        acceleration = None
+        if self.world_gravity or self._forces or has_wells:
+            acceleration = self._external_acceleration(count)
+            if has_wells:
+                self._add_well_acceleration(current, acceleration, count)
+            if self.world_gravity:
+                np.add(acceleration, self._acceleration, out=acceleration)
+
         # History: qadam se pehle kahan tha.
         np.copyto(previous, current)
 
         current += displacement
-        current += self._acceleration * (dt * dt)
+        if acceleration is not None:
+            np.multiply(acceleration, dt * dt, out=acceleration)
+            current += acceleration
 
-        # Gravity ke upar bahar ki taqatain - agar is waqt koi jal rahi hai.
-        if self._forces:
-            current += self._external_acceleration(count) * (dt * dt)
+        if self.collisions:
+            self._resolve_collisions(current, previous)
 
-        self._apply_boundaries(current, previous)
+        # Deewarein sabse aakhir mein. Takraav ki correction kisi ko deewar se
+        # bahar chhod sakti hai, aur aakhri lafz deewar ka hi hota hai.
+        if self.boundaries:
+            self._apply_boundaries(current, previous)
+
+    # ------------------------------------------------------------------
+    # Takraav
+    # ------------------------------------------------------------------
+    def _resolve_collisions(
+        self,
+        current: NDArray[np.float32],
+        previous: NDArray[np.float32],
+    ) -> None:
+        """Takarao - jore NumPy ke saath, particles par koi loop nahi.
+
+        Naqsha har qadam dobara banta hai, kyunki jagah badalti rehti hai.
+        Phir wohi jore ``collision_iterations`` baar chhaane jaate hain:
+        pehle pass ke baad nayi takraav khul jati hai, doosra usay bhi
+        sehta hai.
+
+        Sudhaar ka bara hissa ``current`` par, aur ``COLLISION_PREVIOUS_SHARE``
+        jitna ``previous`` par bhi. Poora hissa dene se jore ki raftaar
+        badalti hi nahi aur dher mein hamesha ke liye halchal reh jati hai;
+        kuch hissa dene se takraav khud raftaar kha jati hai - dher bas jata
+        hai. Uchhal ka koi model nahi: sirf jagah ka sudhaar.
+        """
+        hasher = self._spatial
+        hasher.rebuild(current)
+        pairs_i, pairs_j = hasher.candidate_pairs()
+        self.candidates = int(pairs_i.size)
+        self.overlaps = 0
+        if pairs_i.size == 0:
+            return
+
+        minimum = 2.0 * PARTICLE_RADIUS
+        # Itni chhoti kami ko chhod diya jata hai - warna solver hamesha
+        # "kuch bacha hai" kehta rehta aur har pass poora chalta rehta.
+        touch_sq = (minimum - COLLISION_SLOP) ** 2
+        # Agle pass ke liye itne paas wale jore hi rakhe jaate hain.
+        near_sq = (minimum + COLLISION_CONTACT_MARGIN) ** 2
+        size = int(current.shape[0])
+        x = current[:, 0]
+        y = current[:, 1]
+
+        for iteration in range(self.collision_iterations):
+            dx = x[pairs_j] - x[pairs_i]
+            dy = y[pairs_j] - y[pairs_i]
+            dist_sq = dx * dx + dy * dy
+
+            hit = dist_sq < touch_sq
+            count = int(hit.sum())
+            if iteration == 0:
+                # Pehla pass hi asli takraav hai; baad ke pass usi bhid ko
+                # suljhate hain, isliye unhe ginti mein nahi jodte.
+                self.overlaps = count
+            if count == 0:
+                break
+
+            ii = pairs_i[hit]
+            jj = pairs_j[hit]
+            delta_x = dx[hit]
+            delta_y = dy[hit]
+            dist = np.sqrt(dist_sq[hit])
+            penetration = minimum - dist
+
+            # Ek hi jagah baithe do particles: delta zero hai, isliye simt
+            # indices se banti hai - deterministic, aur zero se taqseem
+            # ka sawal hi paida nahi hota.
+            same_spot = dist < COLLISION_DEGENERATE_DISTANCE
+            if same_spot.any():
+                angle = _fallback_angle(ii, jj)
+                delta_x = np.where(same_spot, np.cos(angle), delta_x)
+                delta_y = np.where(same_spot, np.sin(angle), delta_y)
+                dist = np.where(same_spot, 1.0, dist)
+                penetration = np.where(same_spot, minimum, penetration)
+
+            # Har particle ko aadha dhakka - barabar wazn, barabar hissa.
+            factor = penetration / (2.0 * dist)
+
+            # ``previous`` ko bhi itna hi hissa milta hai, magar poora nahi -
+            # bacha hua hissa raftaar mein badal jata hai. Isi se dher apni
+            # falls ki raftaar kholta hai aur tham jata hai. Poora hissa
+            # (share 1.0) dene par kuch bhi thamta nahi, aur zero par jore
+            # uchhalne lagte hain - dono naapon se dekhe gaye.
+            share = self.previous_share
+            push_x = delta_x * factor
+            push_y = delta_y * factor
+            keep_x = delta_x * factor * share
+            keep_y = delta_y * factor * share
+
+            # Ek particle ke kai jore ho sakte hain - bincount sab jama kar
+            # leta hai (unbuffered add ki tarah, magar tez). Dono taraf ka
+            # hisaab ek hi call mein: indices jod kar, dhakka ulta karke.
+            both = np.concatenate((ii, jj))
+            fix_x = np.bincount(both, weights=np.concatenate((-push_x, push_x)), minlength=size)
+            fix_y = np.bincount(both, weights=np.concatenate((-push_y, push_y)), minlength=size)
+
+            x += fix_x
+            y += fix_y
+            previous[:, 0] += np.bincount(both, weights=np.concatenate((-keep_x, keep_x)), minlength=size)
+            previous[:, 1] += np.bincount(both, weights=np.concatenate((-keep_y, keep_y)), minlength=size)
+
+            if iteration + 1 < self.collision_iterations:
+                # Jore jo ab bahut door hain, agle pass mein bhi nahi mil
+                # sakte - unhe fehrist se hata do. Sirf do index wali arrays
+                # saaf hoti hain, aur doori agle pass mein phir naapi jaati
+                # hai. Yeh saaf-safai pass ke aakhir mein hoti hai, warna
+                # usi pass ke mask purani lambai ke reh jaate hain.
+                keep = dist_sq < near_sq
+                if not keep.all():
+                    pairs_i = pairs_i[keep]
+                    pairs_j = pairs_j[keep]
+                    if pairs_i.size == 0:
+                        break
 
     # ------------------------------------------------------------------
     # Kinare
@@ -281,6 +492,46 @@ class PhysicsSystem:
             safe = np.maximum(dist, 1e-6)
             offsets[inside] = (delta[inside] / safe[:, None]) * falloff[:, None]
         return offsets, inside
+
+    def _add_well_acceleration(
+        self,
+        current: NDArray[np.float32],
+        acceleration: NDArray[np.float32],
+        count: int,
+    ) -> None:
+        """Har kuan apna hissa isi buffer mein jama karta hai.
+
+        Loop kuon par hai - chand hi hote hain. Particles par loop bilkul
+        nahi: har kuan ke liye poora dhunda ek hi NumPy amal mein hilta hai.
+
+        Kheench ulti-square hai, magar softening ke saath:
+
+            a = G * M * delta / (delta^2 + s^2)^(3/2)
+
+        Markaz par ``delta`` khud zero ho jaata hai, aur denominator kabhi
+        zero nahi hota - isliye na NaN, na bekaar ki raftaar.
+        """
+        wells = self._wells
+        if wells is None or wells.count == 0:
+            return
+
+        delta = self._scratch("_delta", (count, 2))
+        dist_sq = self._scratch("_dist_sq", (count,))
+        soft_sq = self.softening * self.softening
+        positions = wells.active_positions
+        masses = wells.active_masses
+
+        for i in range(wells.count):
+            # delta = kuan - particle, yani kheench ki simt seedhi.
+            np.subtract((float(positions[i, 0]), float(positions[i, 1])), current, out=delta)
+            np.einsum("ij,ij->i", delta, delta, out=dist_sq)
+            dist_sq += soft_sq
+            # (r^2)^-1.5 = 1/r^3 - isliye delta/r^3 poori kheench ban jaati hai.
+            # Base kabhi zero nahi (softening > 0), isliye koi NaN nahi.
+            np.power(dist_sq, -1.5, out=dist_sq)
+            np.multiply(dist_sq, self.gravitational_constant * float(masses[i]), out=dist_sq)
+            np.multiply(delta, dist_sq[:, None], out=delta)
+            np.add(acceleration, delta, out=acceleration)
 
     def _scratch(self, name: str, shape: tuple[int, ...]) -> NDArray[np.float32]:
         """Naam wala ek hi buffer - jagah barhne par naya, warna wahi purana."""
