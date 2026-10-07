@@ -8,6 +8,8 @@ from sandbox.config import (
     ATTRACTOR_PREVIEW_COLOR,
     BACKGROUND_COLOR,
     BRUSH_PREVIEW_COLOR,
+    DEBUG_CELL_ALPHA,
+    DEBUG_CELL_COLORS,
     EXPLOSION_FLASH_COLOR,
     EXPLOSION_FLASH_SECONDS,
     EXPLOSION_PREVIEW_COLOR,
@@ -17,13 +19,26 @@ from sandbox.config import (
     HUD_HELP_COLOR,
     HUD_LINE_GAP,
     HUD_MARGIN,
+    HUD_OFF_COLOR,
     HUD_PAUSED_COLOR,
     HUD_TOOL_COLOR,
     PARTICLE_COLOR,
     PARTICLE_RADIUS,
+    WELL_CORE_COLOR,
+    WELL_CORE_RADIUS,
+    WELL_DOT_COLOR,
+    WELL_DOT_RADIUS,
+    WELL_FIELD_COLOR,
+    WELL_FIELD_SCALE,
+    WELL_PREVIEW_COLOR,
+    WELL_RING_COLOR,
+    WELL_VISUAL_RADIUS,
 )
+from sandbox.gravity import GravityWells
 from sandbox.input import TOOL_ORDER, Tool
 from sandbox.particles import ParticleSystem
+from sandbox.spatial import SpatialHash
+
 
 def _fade(
     color: tuple[int, int, int],
@@ -33,8 +48,9 @@ def _fade(
     """Rang ko background ki taraf khiskao - jhalak dheemi hone ke liye."""
     return tuple(int(b + (c - b) * k) for c, b in zip(color, background))
 
+
 class Renderer:
-    """Particles, brush ka nishaan, dhamake ki jhalak, aur HUD.
+    """Particles, kuan, dhamake ki jhalak, auzaar ka hala, aur HUD.
 
     Attributes:
         radius: particle circle ki tajzi (radius), pixels mein.
@@ -54,6 +70,7 @@ class Renderer:
         preview_color: tuple[int, int, int] = BRUSH_PREVIEW_COLOR,
         attractor_color: tuple[int, int, int] = ATTRACTOR_PREVIEW_COLOR,
         explosion_color: tuple[int, int, int] = EXPLOSION_PREVIEW_COLOR,
+        well_color: tuple[int, int, int] = WELL_PREVIEW_COLOR,
     ) -> None:
         self.radius = radius
         self.color = color
@@ -65,6 +82,7 @@ class Renderer:
             Tool.BRUSH: preview_color,
             Tool.ATTRACTOR: attractor_color,
             Tool.EXPLOSION: explosion_color,
+            Tool.WELL: well_color,
         }
         # Font ek hi baar - har frame naya banane ka koi faida nahi.
         # pygame.font khud sambhal leta hai agar abhi init na hua ho.
@@ -74,10 +92,19 @@ class Renderer:
         self._line_height = self._font.get_height() + HUD_LINE_GAP
         # HUD ke neeche chhota sa ishara - kaunsa number kis auzaar ka.
         self._help_text = "  ".join(
-            f"[{i}] {tool.value.capitalize()}" for i, tool in enumerate(TOOL_ORDER, 1)
+            f"[{i}] {tool.value.title()}" for i, tool in enumerate(TOOL_ORDER, 1)
         )
         # Dhamakon ki yaadein - sirf nazar, koi particle nahi.
         self._flashes: list[tuple[float, float, float]] = []
+        # Debug grid yahan banta hai (ek hi baar), taake har frame naya
+        # surface na ho. Yeh sirf padha jaata hai - naqsha waisa hi rehta
+        # hai jaisa physics ne chhoda tha.
+        self._overlay: pygame.Surface | None = None
+        # Chhota ishara - kaunsi key kaunsa kaam karti hai.
+        self._keys_text = (
+            "[Space] Pause  [R] Reset  [G] Gravity  [B] Walls  "
+            "[C] Collisions  [F1] Grid"
+        )
 
     # ------------------------------------------------------------------
     # Particles
@@ -100,6 +127,23 @@ class Renderer:
         for x, y in particles.active_positions:
             # Pygame ko poore number chahiye, decimal nahi.
             draw_circle(surface, color, (int(x), int(y)), radius)
+
+    # ------------------------------------------------------------------
+    # Kuan
+    # ------------------------------------------------------------------
+    def draw_wells(self, surface: pygame.Surface, wells: GravityWells) -> None:
+        """Har kuan apni alag shakal mein - particles jaise bilkul nahi.
+
+        Andar kala dil, upar banafshi ring, aur bahar dheemi field ka hala -
+        isse nazar turant pehchaan leti hai ke yeh duniya ka hissa hai, koi
+        particle nahi. Yahan sirf padha jaata hai, kuch banaya nahi jaata.
+        """
+        for x, y in wells.active_positions:
+            center = (int(x), int(y))
+            pygame.draw.circle(surface, WELL_FIELD_COLOR, center, int(WELL_VISUAL_RADIUS * WELL_FIELD_SCALE), 1)
+            pygame.draw.circle(surface, WELL_CORE_COLOR, center, WELL_CORE_RADIUS)
+            pygame.draw.circle(surface, WELL_RING_COLOR, center, WELL_VISUAL_RADIUS, 2)
+            pygame.draw.circle(surface, WELL_DOT_COLOR, center, WELL_DOT_RADIUS)
 
     # ------------------------------------------------------------------
     # Dhamake ki jhalak
@@ -159,6 +203,48 @@ class Renderer:
         pygame.draw.circle(surface, color, center, max(1, int(radius)), 1)
 
     # ------------------------------------------------------------------
+    # Debug grid
+    # ------------------------------------------------------------------
+    def draw_debug_grid(
+        self,
+        surface: pygame.Surface,
+        spatial: SpatialHash,
+    ) -> None:
+        """Bhare hue khane - jo naqsha padosi dhoondhta hai, wohi nazar aaye.
+
+        Sirf bhare khane khinchay jaate hain (khaali screen par 25,000 se
+        zyada khane hote hain - sab par rect lagana waqt ka zaya). Rang
+        batata hai ke khana kitna bhara hai: halka neela se lal tak.
+
+        Yahan naqsha sirf padha jaata hai: ``occupied_cells`` se aayi hui
+        fehristen chhui nahi jaati, na ``rebuild`` idhar hota hai.
+        """
+        cells_x, cells_y, counts = spatial.occupied_cells()
+        if counts.size == 0:
+            return
+
+        overlay = self._overlay
+        if overlay is None or overlay.get_size() != surface.get_size():
+            overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+            self._overlay = overlay
+        # Pichhle frame ke khane yahin mit jate hain.
+        overlay.fill((0, 0, 0, 0))
+
+        size = max(1, int(round(spatial.cell_size)))
+        steps = len(DEBUG_CELL_COLORS)
+        draw_rect = pygame.draw.rect
+        colors, alphas = DEBUG_CELL_COLORS, DEBUG_CELL_ALPHA
+        for cx, cy, filled in zip(cells_x.tolist(), cells_y.tolist(), counts.tolist()):
+            # Ek particle = sabse thanda, aur zyada par garam rang.
+            rank = min(filled, steps) - 1
+            rect = (cx * size, cy * size, size, size)
+            draw_rect(overlay, (*colors[rank], alphas[rank]), rect)
+            # Patla kinara: bhare hue khane dher ke upar bhi nazar aayein,
+            # warna particles khud hi unhe dhaanp dete hain.
+            draw_rect(overlay, (*colors[rank], min(255, alphas[rank] + 80)), rect, 1)
+        surface.blit(overlay, (0, 0))
+
+    # ------------------------------------------------------------------
     # HUD
     # ------------------------------------------------------------------
     def draw_hud(
@@ -169,29 +255,57 @@ class Renderer:
         capacity: int,
         tool_label: str,
         paused: bool = False,
+        well_count: int = 0,
+        well_capacity: int = 0,
+        world_gravity: bool = True,
+        boundaries: bool = True,
+        collisions: bool = True,
+        debug_grid: bool = False,
     ) -> None:
-        """FPS, particle ka hisaab, physics ka haal, aur haath ka auzaar.
+        """FPS, hisaab, switches, aur haath ka auzaar - sab ek jagah.
 
         Sirf padhta hai: apni marzi se kuch nahi banata, na hisaab badalta.
 
             FPS: 60
             Particles: 1,247 / 10,000
+            Wells: 2 / 32
             Physics: RUNNING
-            Tool: ATTRACTOR
-            [1] Brush  [2] Attractor  [3] Explosion
+            World Gravity: ON   Boundaries: ON
+            Collisions: ON   Grid: OFF
+            Tool: GRAVITY WELL
+            [1] Brush  [2] Attractor  [3] Explosion  [4] Gravity Well
+            [Space] Pause  [R] Reset  [G] Gravity  ...
         """
         font = self._font
-        y = HUD_MARGIN
+        on, off = self.hud_color, HUD_OFF_COLOR
+        lines = (
+            [(f"FPS: {fps:.0f}", self.hud_color)],
+            [(f"Particles: {particle_count:,} / {capacity:,}", self.hud_color)],
+            [(f"Wells: {well_count} / {well_capacity}", self.hud_color)],
+            [
+                (
+                    "Physics: PAUSED" if paused else "Physics: RUNNING",
+                    self.paused_color if paused else self.active_color,
+                )
+            ],
+            [
+                ("World Gravity: ON" if world_gravity else "World Gravity: OFF", self.active_color if world_gravity else HUD_OFF_COLOR),
+                ("   Boundaries: ON" if boundaries else "   Boundaries: OFF", on if boundaries else off),
+            ],
+            [
+                ("Collisions: ON" if collisions else "Collisions: OFF", self.active_color if collisions else HUD_OFF_COLOR),
+                ("   Grid: ON" if debug_grid else "   Grid: OFF", on if debug_grid else off),
+            ],
+            [(f"Tool: {tool_label}", HUD_TOOL_COLOR)],
+            [(self._help_text, HUD_HELP_COLOR)],
+            [(self._keys_text, HUD_HELP_COLOR)],
+        )
 
-        for text, color in (
-            (f"FPS: {fps:.0f}", self.hud_color),
-            (f"Particles: {particle_count:,} / {capacity:,}", self.hud_color),
-            (
-                "Physics: PAUSED" if paused else "Physics: RUNNING",
-                self.paused_color if paused else self.active_color,
-            ),
-            (f"Tool: {tool_label}", HUD_TOOL_COLOR),
-            (self._help_text, HUD_HELP_COLOR),
-        ):
-            surface.blit(font.render(text, True, color), (HUD_MARGIN, y))
+        y = HUD_MARGIN
+        for segments in lines:
+            x = HUD_MARGIN
+            for text, color in segments:
+                image = font.render(text, True, color)
+                surface.blit(image, (x, y))
+                x += image.get_width()
             y += self._line_height
