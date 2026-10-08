@@ -1,15 +1,15 @@
-"""Sirf yaadein rakhna - Pygame nahi, gravity nahi, velocity nahi.
+"""Particle storage only - no Pygame, forces, or velocity objects.
 
-Do float32 arrays: ``positions`` (ab ka pata) aur ``previous_positions``
-(pichhla lamha). Dono ka farq hi raftaar hai.
+Positions use Verlet's current/previous float32 arrays. Material IDs live in
+one preallocated integer array, so spawning does not create per-particle
+Python objects.
 """
-
 from __future__ import annotations
 
 import numpy as np
 from numpy.typing import NDArray
 
-from sandbox.config import MAX_PARTICLES
+from sandbox.config import MATTER, MAX_PARTICLES, WATER
 
 
 class ParticleSystem:
@@ -22,6 +22,7 @@ class ParticleSystem:
         count: abhi kitne zinda.
         positions: poora ``(capacity, 2)``, ab ke pata ke saath.
         previous_positions: poora ``(capacity, 2)``, pichhle lamhe ke saath.
+        materials: poora ``(capacity,)`` integer array of MATTER/WATER IDs.
     """
 
     def __init__(self, capacity: int = MAX_PARTICLES, seed: int | None = None) -> None:
@@ -38,6 +39,9 @@ class ParticleSystem:
         )
         self.previous_positions: NDArray[np.float32] = np.zeros(
             (self.capacity, 2), dtype=np.float32
+        )
+        self.materials: NDArray[np.uint8] = np.zeros(
+            self.capacity, dtype=np.uint8
         )
 
     # ------------------------------------------------------------------
@@ -62,15 +66,22 @@ class ParticleSystem:
         """Wahi baat, pichhle lamhe ki - shape ``(count, 2)``."""
         return self.previous_positions[: self.count]
 
+    @property
+    def active_materials(self) -> NDArray[np.uint8]:
+        """Material IDs for live particles, shape ``(count,)``."""
+        return self.materials[: self.count]
+
     # ------------------------------------------------------------------
     # Badlaav
     # ------------------------------------------------------------------
-    def spawn(self, x: float, y: float) -> bool:
-        """``(x, y)`` par nayi yaad.
+    def spawn(self, x: float, y: float, material: int = MATTER) -> bool:
+        """Spawn one particle at ``(x, y)`` with zero initial velocity.
 
-        Ab aur pichhla lamha dono wahi - yani raftaar zero. Jagah na ho to
-        kuch nahi hota aur ``False`` laut aata hai.
+        Slots are reused after ``clear()``, so the material is always written
+        when a particle is spawned. Returns ``False`` when storage is full.
         """
+        if material not in (MATTER, WATER):
+            raise ValueError(f"unsupported material ID: {material}")
         if self.count >= self.capacity:
             return False
 
@@ -78,6 +89,7 @@ class ParticleSystem:
         self.positions[self.count, 1] = y
         self.previous_positions[self.count, 0] = x
         self.previous_positions[self.count, 1] = y
+        self.materials[self.count] = material
         self.count += 1
         return True
 
@@ -87,6 +99,7 @@ class ParticleSystem:
         y: float,
         radius: float,
         count: int,
+        material: int = MATTER,
     ) -> int:
         """``(x, y)`` ke gird disk bhar ke particles - ek hi baar mein.
 
@@ -94,8 +107,11 @@ class ParticleSystem:
         particles markaz par zyada aur kinaron par kam girte hain. Isi liye
         yeh asli disk banata hai, square nahi.
 
-        Jagah kam pad jaye to jitne aa sakein utne hi. Lautata hai kitne bane.
+        ``material`` defaults to MATTER for the existing brush. If storage is
+        short, as many particles as fit are spawned; return the number made.
         """
+        if material not in (MATTER, WATER):
+            raise ValueError(f"unsupported material ID: {material}")
         free = self.capacity - self.count
         if count <= 0 or free <= 0 or radius <= 0.0:
             return 0
@@ -111,6 +127,7 @@ class ParticleSystem:
         self.positions[lo:hi, 1] = y + r * np.sin(angle)
         # Pichhla lamha bhi wahi - naye particles raftaar zero se shuru.
         self.previous_positions[lo:hi] = self.positions[lo:hi]
+        self.materials[lo:hi] = material
         self.count = hi
         return n
 
