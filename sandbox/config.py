@@ -34,9 +34,8 @@ WATER = 1
 # A diameter-sized cell means ordinary collisions need only a 3x3 neighborhood.
 CELL_SIZE = PARTICLE_RADIUS * 2
 COLLISION_ITERATIONS = 3
-# Start in ghost mode so the existing experiment remains easy to compare;
-# press C to enable positional particle-particle collisions.
-COLLISIONS_ENABLED = False
+# Preserve the legacy Matter collision default; press C to toggle it in-app.
+COLLISIONS_ENABLED = True
 COLLISION_DISTANCE_EPSILON_SQUARED = 1e-12
 
 # ---------------------------------------------------------------------------
@@ -51,6 +50,54 @@ SPH_VISCOSITY = 3_000.0
 SPH_DENSITY_EPSILON = 1e-6
 # Water should settle against walls rather than bounce like separate marbles.
 SPH_WALL_BOUNCE = 0.0
+
+# ---------------------------------------------------------------------------
+# Legacy sandbox tools, world controls, and UI
+# ---------------------------------------------------------------------------
+MAX_FRAME_SECONDS = 0.25
+MAX_STEPS_PER_FRAME = 8
+MAX_WELLS = 32
+MAX_CANDIDATE_PAIRS_PER_CELL = 100_000
+
+ATTRACTOR_RADIUS = 180.0
+ATTRACTOR_STRENGTH = 1_500.0
+EXPLOSION_RADIUS = 130.0
+EXPLOSION_STRENGTH = 8_000.0
+GRAVITATIONAL_CONSTANT = 50.0
+WELL_MASS = 1_000.0
+WELL_SOFTENING = 20.0
+
+COLLISION_SLOP = 0.02
+COLLISION_CONTACT_MARGIN = 2.0
+COLLISION_DEGENERATE_DISTANCE = 1e-6
+COLLISION_PREVIOUS_SHARE = 0.75
+
+ATTRACTOR_PREVIEW_COLOR = (80, 180, 255)
+EXPLOSION_PREVIEW_COLOR = (255, 100, 75)
+WELL_PREVIEW_COLOR = (205, 100, 255)
+WELL_PREVIEW_RADIUS = 24.0
+EXPLOSION_FLASH_COLOR = (255, 150, 60)
+EXPLOSION_FLASH_SECONDS = 0.32
+
+DEBUG_CELL_COLORS = (
+    (50, 90, 150),
+    (55, 150, 200),
+    (230, 180, 60),
+    (245, 75, 60),
+)
+DEBUG_CELL_ALPHA = (28, 40, 55, 75)
+HUD_OFF_COLOR = (105, 115, 130)
+HUD_HELP_COLOR = (110, 135, 160)
+HUD_TOOL_COLOR = (140, 210, 160)
+
+WELL_CORE_COLOR = (9, 8, 18)
+WELL_CORE_RADIUS = 8
+WELL_DOT_COLOR = (255, 225, 255)
+WELL_DOT_RADIUS = 2
+WELL_FIELD_COLOR = (140, 70, 190)
+WELL_FIELD_SCALE = 2.2
+WELL_RING_COLOR = (205, 105, 245)
+WELL_VISUAL_RADIUS = 12
 
 # ---------------------------------------------------------------------------
 # Physics - jo neeche kheenchta hai
@@ -77,7 +124,7 @@ HUD_LINE_GAP = 4
 # ---------------------------------------------------------------------------
 # Brush - haath se banayi hui yaadein
 # ---------------------------------------------------------------------------
-# Spawn area ka radius (particle ke radius se alag baat hai).
+# Spawn area ka radius (particle ke radius se alag baat).
 BRUSH_RADIUS = 18
 BRUSH_MIN_RADIUS = 1
 BRUSH_MAX_RADIUS = 100
