@@ -63,7 +63,7 @@ class ParticleSystem:
 
     @property
     def active_previous_positions(self) -> NDArray[np.float32]:
-        """Wahi baat, pichhle lamhe ki - shape ``(count, 2)``."""
+        """Wahi baat, pichhle lamhe ki - shape ``(count, 2``."""
         return self.previous_positions[: self.count]
 
     @property
